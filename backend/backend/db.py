@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 # DB lives at the workspace root so future sibling projects share it.
@@ -68,3 +68,19 @@ def list_submissions(limit: int = 50) -> list[dict]:
     with connect() as c:
         rows = c.execute("SELECT * FROM submissions ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
         return [dict(r) for r in rows]
+
+
+def reap_stale_pending(older_than_seconds: int = 300) -> int:
+    """Mark submissions still 'pending' after older_than_seconds as 'lost'.
+
+    Run on startup. Catches rows where the process died after the row was
+    inserted but before mark_status moved it to 'printed' or 'failed'.
+    """
+    cutoff = (datetime.now(UTC) - timedelta(seconds=older_than_seconds)).isoformat()
+    with connect() as c:
+        cur = c.execute(
+            "UPDATE submissions SET status = 'lost', error = 'process died mid-print' "
+            "WHERE status = 'pending' AND created_at < ?",
+            (cutoff,),
+        )
+        return cur.rowcount

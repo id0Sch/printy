@@ -11,7 +11,7 @@ from importlib.resources import files
 from fastmcp import FastMCP
 
 from . import db
-from .render import print_submission
+from .service import submit_and_print
 
 mcp = FastMCP("printy")
 
@@ -36,13 +36,7 @@ def print_message(sender: str, subject: str, body: str) -> dict:
     Returns:
         {"id": <int>, "status": "printed"} on success.
     """
-    sub_id = db.insert_submission(sender, subject, body)
-    try:
-        print_submission(sender, subject, body)
-    except Exception as exc:
-        db.mark_status(sub_id, "failed", str(exc))
-        raise
-    db.mark_status(sub_id, "printed")
+    sub_id = submit_and_print(sender, subject, body)
     return {"id": sub_id, "status": "printed"}
 
 

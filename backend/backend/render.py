@@ -38,6 +38,8 @@ def print_submission(sender: str, subject: str, body: str) -> None:
         p.text(_wrap(subject or "(no subject)"))
         p.set(font="a", align="left", bold=False)
         p.text(_wrap(f"from: {sender}"))
+        # Local time on receipts on purpose — humans read these. UTC is for
+        # the audit trail in db.py (created_at).
         p.text(datetime.now().strftime("%Y-%m-%d %H:%M") + "\n")
         p.text(_hr("="))
 

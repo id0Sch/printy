@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from . import db
 from .mcp_server import mcp
 from .printer import is_connected
-from .render import print_submission
+from .service import PrintError, submit_and_print
 
 log = logging.getLogger("printy")
 
@@ -22,6 +22,9 @@ mcp_app = mcp.http_app(path="/")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.init()
+    reaped = db.reap_stale_pending()
+    if reaped:
+        log.warning("reaped %d stale pending submissions on startup", reaped)
     async with mcp_app.lifespan(app):
         yield
 
@@ -49,7 +52,6 @@ class PrintRequest(BaseModel):
 class PrintResponse(BaseModel):
     id: int
     status: str
-    error: str | None = None
 
 
 @printy_app.get("/health")
@@ -66,14 +68,10 @@ def health() -> JSONResponse:
 
 @printy_app.post("/print", response_model=PrintResponse)
 def submit_print(req: PrintRequest) -> PrintResponse:
-    sub_id = db.insert_submission(req.sender, req.subject, req.body)
     try:
-        print_submission(req.sender, req.subject, req.body)
-    except Exception as exc:
-        log.exception("print failed for submission %s", sub_id)
-        db.mark_status(sub_id, "failed", str(exc))
+        sub_id = submit_and_print(req.sender, req.subject, req.body)
+    except PrintError as exc:
         raise HTTPException(status_code=502, detail=f"print failed: {exc}") from exc
-    db.mark_status(sub_id, "printed")
     return PrintResponse(id=sub_id, status="printed")
 
 

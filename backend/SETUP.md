@@ -89,5 +89,10 @@ and `format_calendar` prompts.
   up` first.
 - **MCP tools not visible in Claude Code**: registered after the session
   started. Run `/mcp reconnect` or start a new session.
+- **launchd job won't start / immediately exits**: check
+  `~/dev/printy/printy.stderr.log`. Common cause: working dir wrong (the
+  plist hardcodes `~/dev/printy` — if you cloned elsewhere, edit the plist
+  and `launchctl bootout` + `bootstrap` again). Inspect with:
+  `launchctl print gui/$UID/co.printy.backend | grep -E 'state|last exit'`.
 - **Want to also print from the printer-host itself?** It already works —
   `claude mcp add` with `http://127.0.0.1:7777/printy/mcp/` (no tailscale).
