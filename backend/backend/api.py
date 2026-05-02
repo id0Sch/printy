@@ -5,11 +5,12 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from . import db
+from .identity import from_headers
 from .mcp_server import mcp
 from .printer import is_connected
 from .service import PrintError, submit_and_print
@@ -67,9 +68,11 @@ def health() -> JSONResponse:
 
 
 @printy_app.post("/print", response_model=PrintResponse)
-def submit_print(req: PrintRequest) -> PrintResponse:
+def submit_print(req: PrintRequest, request: Request) -> PrintResponse:
+    user = from_headers(request.headers)
+    requester = user.short() if user else None
     try:
-        sub_id = submit_and_print(req.sender, req.subject, req.body)
+        sub_id = submit_and_print(req.sender, req.subject, req.body, requester=requester)
     except PrintError as exc:
         raise HTTPException(status_code=502, detail=f"print failed: {exc}") from exc
     return PrintResponse(id=sub_id, status="printed")

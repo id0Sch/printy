@@ -28,16 +28,24 @@ class PrintError(RuntimeError):
         self.original = original
 
 
-def submit_and_print(sender: str, subject: str, body: str) -> int:
+def submit_and_print(
+    sender: str,
+    subject: str,
+    body: str,
+    requester: str | None = None,
+) -> int:
     """Persist a submission, print it under the shared lock, return the id.
+
+    `requester` is the tailnet identity from Tailscale-User-* headers when
+    available, used for the audit column and stamped onto the receipt.
 
     On printer error, marks the row 'failed' and raises PrintError so the
     caller can map it to its own protocol's error response.
     """
-    sub_id = db.insert_submission(sender, subject, body)
+    sub_id = db.insert_submission(sender, subject, body, requester=requester)
     with _print_lock:
         try:
-            print_submission(sender, subject, body)
+            print_submission(sender, subject, body, requester=requester)
         except Exception as exc:
             log.exception("print failed for submission %s", sub_id)
             db.mark_status(sub_id, "failed", str(exc))

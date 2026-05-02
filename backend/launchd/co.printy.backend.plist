@@ -4,7 +4,7 @@
   Auto-start the printy backend at login on the printer-laptop.
 
   Install:
-    1. Copy and substitute __HOME__ with your $HOME (e.g. /Users/alice):
+    1. Copy and substitute __HOME__ with your $HOME:
          sed "s|__HOME__|$HOME|g" backend/launchd/co.printy.backend.plist \
            > ~/Library/LaunchAgents/co.printy.backend.plist
     2. Load:

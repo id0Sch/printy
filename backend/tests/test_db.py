@@ -25,7 +25,13 @@ def test_insert_and_get_roundtrip(fresh_db):
     assert row["body"] == "body text"
     assert row["status"] == "pending"
     assert row["error"] is None
+    assert row["requester"] is None
     assert row["created_at"]  # iso string
+
+
+def test_insert_records_requester(fresh_db):
+    sub_id = fresh_db.insert_submission("calendar", "s", "b", requester="alice@example.com")
+    assert fresh_db.get_submission(sub_id)["requester"] == "alice@example.com"
 
 
 def test_mark_status_printed(fresh_db):

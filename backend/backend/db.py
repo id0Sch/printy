@@ -18,7 +18,8 @@ CREATE TABLE IF NOT EXISTS submissions (
     subject     TEXT NOT NULL,
     body        TEXT NOT NULL,
     status      TEXT NOT NULL DEFAULT 'pending',
-    error       TEXT
+    error       TEXT,
+    requester   TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_submissions_created_at ON submissions(created_at);
 """
@@ -27,6 +28,10 @@ CREATE INDEX IF NOT EXISTS idx_submissions_created_at ON submissions(created_at)
 def init() -> None:
     with connect() as c:
         c.executescript(SCHEMA)
+        # Lightweight migration for existing DBs predating the requester col.
+        cols = {row["name"] for row in c.execute("PRAGMA table_info(submissions)").fetchall()}
+        if "requester" not in cols:
+            c.execute("ALTER TABLE submissions ADD COLUMN requester TEXT")
 
 
 @contextmanager
@@ -41,11 +46,17 @@ def connect():
         conn.close()
 
 
-def insert_submission(sender: str, subject: str, body: str) -> int:
+def insert_submission(
+    sender: str,
+    subject: str,
+    body: str,
+    requester: str | None = None,
+) -> int:
     with connect() as c:
         cur = c.execute(
-            "INSERT INTO submissions (created_at, sender, subject, body) VALUES (?, ?, ?, ?)",
-            (datetime.now(UTC).isoformat(), sender, subject, body),
+            "INSERT INTO submissions (created_at, sender, subject, body, requester) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (datetime.now(UTC).isoformat(), sender, subject, body, requester),
         )
         return cur.lastrowid
 

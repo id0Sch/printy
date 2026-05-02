@@ -32,12 +32,19 @@ def _wrap(text: str, width: int = LINE_WIDTH) -> str:
     return "\n".join(out_lines) + "\n"
 
 
-def print_submission(sender: str, subject: str, body: str) -> None:
+def print_submission(
+    sender: str,
+    subject: str,
+    body: str,
+    requester: str | None = None,
+) -> None:
     with open_printer() as p:
         p.set(font="a", align="center", bold=True)
         p.text(_wrap(subject or "(no subject)"))
         p.set(font="a", align="left", bold=False)
         p.text(_wrap(f"from: {sender}"))
+        if requester and requester != sender:
+            p.text(_wrap(f"by:   {requester}"))
         # Local time on receipts on purpose — humans read these. UTC is for
         # the audit trail in db.py (created_at).
         p.text(datetime.now().strftime("%Y-%m-%d %H:%M") + "\n")

@@ -9,8 +9,10 @@ from __future__ import annotations
 from importlib.resources import files
 
 from fastmcp import FastMCP
+from fastmcp.server.dependencies import get_http_headers
 
 from . import db
+from .identity import from_headers
 from .service import submit_and_print
 
 mcp = FastMCP("printy")
@@ -36,7 +38,9 @@ def print_message(sender: str, subject: str, body: str) -> dict:
     Returns:
         {"id": <int>, "status": "printed"} on success.
     """
-    sub_id = submit_and_print(sender, subject, body)
+    user = from_headers(get_http_headers())
+    requester = user.short() if user else None
+    sub_id = submit_and_print(sender, subject, body, requester=requester)
     return {"id": sub_id, "status": "printed"}
 
 
