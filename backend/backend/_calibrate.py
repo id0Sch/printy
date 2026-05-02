@@ -1,4 +1,5 @@
 """Print rulers in Font A and Font B to determine real line widths."""
+
 from .printer import open_printer
 
 

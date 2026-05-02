@@ -1,6 +1,7 @@
 """Try printing rulers without text wrapping by sending raw ESC/POS.
 This bypasses the python-escpos profile so we see the device's real column count.
 """
+
 from .printer import open_printer
 
 

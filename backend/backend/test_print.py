@@ -1,4 +1,5 @@
 """Send a smoke-test receipt to the thermal printer."""
+
 from datetime import datetime
 
 from .printer import open_printer

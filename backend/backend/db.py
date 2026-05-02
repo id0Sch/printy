@@ -1,9 +1,10 @@
 """SQLite persistence for print submissions. Stdlib only."""
+
 from __future__ import annotations
 
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 # DB lives at the workspace root so future sibling projects share it.
@@ -44,7 +45,7 @@ def insert_submission(sender: str, subject: str, body: str) -> int:
     with connect() as c:
         cur = c.execute(
             "INSERT INTO submissions (created_at, sender, subject, body) VALUES (?, ?, ?, ?)",
-            (datetime.now(timezone.utc).isoformat(), sender, subject, body),
+            (datetime.now(UTC).isoformat(), sender, subject, body),
         )
         return cur.lastrowid
 
@@ -59,15 +60,11 @@ def mark_status(submission_id: int, status: str, error: str | None = None) -> No
 
 def get_submission(submission_id: int) -> dict | None:
     with connect() as c:
-        row = c.execute(
-            "SELECT * FROM submissions WHERE id = ?", (submission_id,)
-        ).fetchone()
+        row = c.execute("SELECT * FROM submissions WHERE id = ?", (submission_id,)).fetchone()
         return dict(row) if row else None
 
 
 def list_submissions(limit: int = 50) -> list[dict]:
     with connect() as c:
-        rows = c.execute(
-            "SELECT * FROM submissions ORDER BY id DESC LIMIT ?", (limit,)
-        ).fetchall()
+        rows = c.execute("SELECT * FROM submissions ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
         return [dict(r) for r in rows]

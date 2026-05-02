@@ -1,4 +1,5 @@
 """Render a (from, subject, body) submission to the thermal printer."""
+
 from __future__ import annotations
 
 import textwrap

@@ -1,4 +1,5 @@
 """FastAPI app: accept submissions, persist, print. MCP mounted at /mcp."""
+
 from __future__ import annotations
 
 import logging

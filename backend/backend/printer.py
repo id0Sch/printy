@@ -1,4 +1,5 @@
 """Connect to the MIAOBAO 58Printer over USB."""
+
 from __future__ import annotations
 
 import os

@@ -18,5 +18,13 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["backend"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"backend/prompts" = "backend/prompts"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.12",
+]
+
 [project.scripts]
 backend = "backend.__main__:main"
