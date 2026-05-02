@@ -1,0 +1,17 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Local DB and logs (per-host, not shared)
+printy.db
+printy.db-journal
+printy.db-wal
+printy.db-shm
+*.log

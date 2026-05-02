@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Auto-start the printy backend at login on the printer-laptop.
+
+  Install:
+    1. Copy and substitute __HOME__ with your $HOME (e.g. /Users/alice):
+         sed "s|__HOME__|$HOME|g" backend/launchd/co.printy.backend.plist \
+           > ~/Library/LaunchAgents/co.printy.backend.plist
+    2. Load:
+         launchctl bootstrap gui/$UID ~/Library/LaunchAgents/co.printy.backend.plist
+    3. Status / logs:
+         launchctl print gui/$UID/co.printy.backend
+         tail -f __HOME__/dev/printy/printy.stdout.log
+    4. Unload:
+         launchctl bootout gui/$UID/co.printy.backend
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>co.printy.backend</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>__HOME__/.local/bin/uv</string>
+        <string>run</string>
+        <string>python</string>
+        <string>-m</string>
+        <string>backend</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>__HOME__/dev/printy</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>__HOME__/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+
+    <key>StandardOutPath</key>
+    <string>__HOME__/dev/printy/printy.stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>__HOME__/dev/printy/printy.stderr.log</string>
+</dict>
+</plist>
