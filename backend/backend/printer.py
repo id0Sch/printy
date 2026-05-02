@@ -7,6 +7,7 @@ import platform
 from contextlib import contextmanager
 
 import usb.backend.libusb1
+import usb.core
 from escpos.printer import Usb
 
 VENDOR_ID = 0x0483
@@ -30,6 +31,12 @@ def _libusb_backend():
         if path and os.path.exists(path):
             return usb.backend.libusb1.get_backend(find_library=lambda _p=path: _p)
     return None
+
+
+def is_connected() -> bool:
+    """Cheap probe: is the printer plugged in? Doesn't claim the device."""
+    backend = _libusb_backend()
+    return usb.core.find(idVendor=VENDOR_ID, idProduct=PRODUCT_ID, backend=backend) is not None
 
 
 @contextmanager

@@ -6,10 +6,12 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from . import db
 from .mcp_server import mcp
+from .printer import is_connected
 from .render import print_submission
 
 log = logging.getLogger("printy")
@@ -51,10 +53,15 @@ class PrintResponse(BaseModel):
 
 
 @printy_app.get("/health")
-def health() -> dict:
+def health() -> JSONResponse:
     with db.connect() as c:
         c.execute("SELECT 1").fetchone()
-    return {"status": "ok"}
+    printer_connected = is_connected()
+    body = {
+        "status": "ok" if printer_connected else "degraded",
+        "printer": "connected" if printer_connected else "missing",
+    }
+    return JSONResponse(body, status_code=200 if printer_connected else 503)
 
 
 @printy_app.post("/print", response_model=PrintResponse)
