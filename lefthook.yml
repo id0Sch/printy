@@ -1,0 +1,23 @@
+# Git hooks for printy. Install with: lefthook install
+#
+# pre-commit  → fast checks on staged files only (auto-fix lints, format).
+# pre-push    → run the full lint + format check across the workspace.
+
+pre-commit:
+  parallel: true
+  jobs:
+    - name: ruff-format
+      glob: "*.py"
+      run: uv run ruff format {staged_files}
+      stage_fixed: true
+    - name: ruff-lint
+      glob: "*.py"
+      run: uv run ruff check --fix {staged_files}
+      stage_fixed: true
+
+pre-push:
+  jobs:
+    - name: ruff-format-check
+      run: uv run ruff format --check backend/
+    - name: ruff-lint
+      run: uv run ruff check backend/
