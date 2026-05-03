@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from . import db
@@ -14,6 +15,8 @@ from .identity import from_headers
 from .mcp_server import mcp
 from .printer import is_connected
 from .service import PrintError, submit_and_print
+
+STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 log = logging.getLogger("printy")
 
@@ -89,3 +92,9 @@ def get_one(submission_id: int) -> dict:
     if row is None:
         raise HTTPException(status_code=404, detail="not found")
     return row
+
+
+@printy_app.get("/ui", include_in_schema=False)
+@printy_app.get("/ui/", include_in_schema=False)
+def ui() -> FileResponse:
+    return FileResponse(STATIC_DIR / "index.html")

@@ -1,0 +1,504 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>printy · operator's log</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Newsreader:ital,opsz,wght@1,6..72,400;1,6..72,500&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          paper:      "#F4EDDB",
+          "paper-hi": "#FAF4E2",
+          ink:        "#1A1814",
+          "ink-mid":  "#5B5447",
+          "ink-lo":   "#8C8473",
+          "ink-xlo":  "#B8AE96",
+          green:      "#396B48",
+          amber:      "#BF851D",
+          red:        "#C8421E",
+          gray:       "#777067",
+        },
+        fontFamily: {
+          mono: ['"JetBrains Mono"', "ui-monospace", "Menlo", "monospace"],
+          serif: ['"Newsreader"', "Georgia", "serif"],
+        },
+      },
+    },
+  };
+</script>
+<style>
+  :root { --paper: #F4EDDB; --ink: #1A1814; }
+  html, body, #root { height: 100%; }
+  body {
+    background-color: var(--paper);
+    color: var(--ink);
+    font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    /* subtle paper grain */
+    background-image:
+      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.10  0 0 0 0 0.09  0 0 0 0 0.07  0 0 0 0.10 0'/></filter><rect width='240' height='240' filter='url(%23n)'/></svg>");
+    background-repeat: repeat;
+  }
+  /* Dashed perforation utility */
+  .perf-t { border-top: 1px dashed var(--ink); }
+  .perf-b { border-bottom: 1px dashed var(--ink); }
+  /* Solid 2px rule */
+  .rule-t { border-top: 2px solid var(--ink); }
+  /* Status stamp uses outlined box, sharp corners */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: #C9BFA1; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  /* Wider letter spacing helper for tracker mono */
+  .tracker { letter-spacing: 0.16em; }
+  .tracker-tight { letter-spacing: 0.08em; }
+  .tracker-wide { letter-spacing: 0.24em; }
+  /* selected row left bar — implemented in component, keep here for crispness */
+  .blink { animation: blink 1.4s steps(2, end) infinite; }
+  @keyframes blink { 50% { opacity: 0.25; } }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+const { useEffect, useState, useMemo, useCallback, useRef } = React;
+
+const API = "/printy";
+const REFRESH_MS = 5000;
+
+const STAMP_COLORS = {
+  printed: "text-green border-green",
+  pending: "text-amber border-amber",
+  failed:  "text-red border-red",
+  lost:    "text-gray border-gray",
+};
+const STAMP_LABEL = {
+  printed: "PRINTED",
+  pending: "PENDING",
+  failed:  " FAILED",
+  lost:    "  LOST ",
+};
+
+function Stamp({ status, big = false }) {
+  const cls = STAMP_COLORS[status] || STAMP_COLORS.lost;
+  const label = STAMP_LABEL[status] || STAMP_LABEL.lost;
+  return (
+    <span
+      className={
+        "inline-flex items-center border font-mono font-bold tracking-[0.18em] " +
+        (big ? "px-2.5 py-1 text-sm " : "px-1.5 py-0.5 text-[10px] ") +
+        cls
+      }
+    >
+      {label}
+    </span>
+  );
+}
+
+function bar(count, total, len = 40) {
+  if (total <= 0) return "░".repeat(len);
+  const filled = Math.max(0, Math.min(len, Math.round((count / total) * len)));
+  return "█".repeat(filled) + "░".repeat(len - filled);
+}
+
+function pct(count, total) {
+  if (total <= 0) return "  0%";
+  return String(Math.round((count / total) * 100)).padStart(3, " ") + "%";
+}
+
+function fmtTime(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(+d)) return iso;
+  return d.toLocaleTimeString([], { hour12: false });
+}
+
+function fmtDateTime(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(+d)) return iso;
+  const pad = (n) => String(n).padStart(2, "0");
+  return (
+    d.getUTCFullYear() + "-" + pad(d.getUTCMonth() + 1) + "-" + pad(d.getUTCDate()) +
+    "  " +
+    pad(d.getUTCHours()) + ":" + pad(d.getUTCMinutes()) + ":" + pad(d.getUTCSeconds()) +
+    " UTC"
+  );
+}
+
+const DAYS = ["SUN","MON","TUE","WED","THU","FRI","SAT"];
+function fmtNowHeader(d = new Date()) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return (
+    DAYS[d.getUTCDay()] + " · " +
+    d.getUTCFullYear() + "-" + pad(d.getUTCMonth() + 1) + "-" + pad(d.getUTCDate()) +
+    " · " +
+    pad(d.getUTCHours()) + ":" + pad(d.getUTCMinutes()) + ":" + pad(d.getUTCSeconds()) +
+    " UTC"
+  );
+}
+
+function RuleRow({ label, children }) {
+  return (
+    <div className="flex items-center gap-3 my-1">
+      <div className="h-[2px] w-7 bg-ink shrink-0" />
+      <div className="font-mono font-bold tracking-[0.32em] text-[11px] text-ink shrink-0">
+        {label}
+      </div>
+      <div className="h-[2px] flex-1 bg-ink" />
+      {children}
+    </div>
+  );
+}
+
+function TapeBarRow({ label, count, total, color }) {
+  return (
+    <div className="flex items-center gap-3 sm:gap-6 py-1">
+      <div className="font-mono font-bold tracking-[0.24em] sm:tracking-[0.32em] text-xs sm:text-sm w-[88px] sm:w-[140px] shrink-0">{label}</div>
+      <div className="font-mono font-bold text-lg sm:text-2xl w-[44px] sm:w-[60px] shrink-0 tabular-nums">
+        {String(count).padStart(3, " ")}
+      </div>
+      <div className={"font-mono text-sm sm:text-base whitespace-nowrap overflow-hidden flex-1 min-w-0 " + color}>
+        {bar(count, total)}
+      </div>
+      <div className="font-mono text-xs sm:text-sm text-ink-mid w-[44px] sm:w-[60px] tabular-nums shrink-0 text-right">
+        {pct(count, total)}
+      </div>
+    </div>
+  );
+}
+
+function MetaRow({ k, v, valueColor }) {
+  return (
+    <div className="flex items-baseline gap-3">
+      <div className="font-mono font-bold tracking-[0.32em] text-[10px] text-ink-lo w-20 shrink-0">{k}</div>
+      <div className={"font-mono text-sm break-words " + (valueColor || "text-ink")}>{v}</div>
+    </div>
+  );
+}
+
+function LogRow({ row, selected, onClick }) {
+  return (
+    <div className="perf-b relative">
+      {selected && <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-ink z-10" />}
+      <button
+        onClick={onClick}
+        className={
+          "w-full text-left flex flex-col gap-1.5 px-4 py-3 sm:px-5 sm:py-3.5 hover:bg-paper-hi transition-colors " +
+          "lg:grid lg:items-center lg:gap-3 lg:[grid-template-columns:56px_80px_110px_96px_1fr] " +
+          (selected ? "bg-paper-hi" : "")
+        }
+      >
+        <div className="flex items-center gap-3 min-w-0 contents-on-lg lg:contents">
+          <div className={"font-mono text-sm shrink-0 tabular-nums " + (selected ? "font-bold" : "")}>
+            {selected ? "▸ " : "  "}{row.id}
+          </div>
+          <div className="font-mono text-xs sm:text-sm text-ink-mid tabular-nums shrink-0">
+            {fmtTime(row.created_at)}
+          </div>
+          <div className="shrink-0"><Stamp status={row.status} /></div>
+          <div className="font-mono text-sm font-bold text-ink truncate ml-auto lg:ml-0">
+            {row.sender}
+          </div>
+        </div>
+        <div className={"font-mono text-sm truncate min-w-0 " + (selected ? "text-ink" : "text-ink-mid")}>
+          {row.subject}
+        </div>
+      </button>
+    </div>
+  );
+}
+
+function Ticket({ row, onClose, onReprint }) {
+  if (!row) {
+    return (
+      <div className="flex flex-col">
+        <RuleRow label="TICKET" />
+        <div className="mt-10 font-mono text-sm text-ink-lo text-center">
+          {"┄┄┄  no ticket selected  ┄┄┄"}
+        </div>
+        <div className="mt-2 font-mono text-xs text-ink-xlo text-center tracker-wide">
+          select a row from the log
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col">
+      <RuleRow label="TICKET" />
+
+      <div className="mt-5 flex items-center justify-between gap-4">
+        <div className="font-serif italic text-5xl text-ink leading-none tracking-[-0.02em]">
+          № {row.id}
+        </div>
+        <Stamp status={row.status} big />
+      </div>
+
+      <div className="mt-5 perf-t" />
+      <div className="mt-5 space-y-2.5">
+        <MetaRow k="CREATED" v={fmtDateTime(row.created_at)} />
+        <MetaRow k="FROM" v={row.sender} />
+        <MetaRow k="SUBJECT" v={row.subject} />
+        <MetaRow k="REQ" v={row.requester || "—"} />
+        {row.error && <MetaRow k="ERROR" v={row.error} valueColor="text-red" />}
+      </div>
+
+      <div className="mt-5 perf-t" />
+
+      <div className="mt-4 font-mono font-bold tracking-[0.32em] text-[10px] text-ink-lo">
+        BODY · 32 COL · FONT A
+      </div>
+      <pre className="mt-2.5 font-mono text-[14px] text-ink whitespace-pre-wrap leading-[1.45]">
+{row.body}
+      </pre>
+
+      <div className="mt-5 border-t border-dashed border-ink" style={{ borderTopWidth: "1px" }} />
+      <div className="mt-2 font-mono text-[11px] text-ink-lo tracking-[0.16em] text-center">
+        ✂ ─ ─ ─ ─ ─  TEAR HERE  ─ ─ ─ ─ ─ ✂
+      </div>
+
+      <div className="mt-5 flex items-center gap-5 font-mono text-[11px] tracker-tight">
+        <button
+          onClick={onReprint}
+          className="font-bold text-ink hover:text-green"
+          title="re-submit body, sender and subject as a new print"
+        >
+          [R] reprint
+        </button>
+        <button onClick={onClose} className="font-bold text-ink-mid hover:text-ink">
+          [⌫] dismiss
+        </button>
+        <a
+          className="font-bold text-ink-mid hover:text-ink"
+          href={`/printy/submissions/${row.id}`}
+          target="_blank"
+          rel="noreferrer"
+        >
+          [O] open raw
+        </a>
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  const [submissions, setSubmissions] = useState([]);
+  const [health, setHealth] = useState(null);
+  const [selectedId, setSelectedId] = useState(null);
+  const [error, setError] = useState(null);
+  const [now, setNow] = useState(new Date());
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [reprintMsg, setReprintMsg] = useState(null);
+  const ticketRef = useRef(null);
+
+  const load = useCallback(async () => {
+    try {
+      const [subRes, healthRes] = await Promise.all([
+        fetch(`${API}/submissions?limit=100`),
+        fetch(`${API}/health`).catch(() => null),
+      ]);
+      if (!subRes.ok) throw new Error(`HTTP ${subRes.status}`);
+      const subs = await subRes.json();
+      setSubmissions(subs);
+      setError(null);
+      if (healthRes) {
+        try { setHealth(await healthRes.json()); } catch { setHealth(null); }
+      }
+    } catch (e) {
+      setError(e.message || String(e));
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const t = setInterval(load, REFRESH_MS);
+    return () => clearInterval(t);
+  }, [autoRefresh, load]);
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  useEffect(() => {
+    if (!selectedId || !ticketRef.current) return;
+    if (window.matchMedia("(max-width: 1023px)").matches) {
+      ticketRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [selectedId]);
+
+  const selected = useMemo(
+    () => submissions.find((s) => s.id === selectedId) || null,
+    [submissions, selectedId]
+  );
+
+  const counts = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    const c = { today: 0, printed: 0, pending: 0, failed: 0, lost: 0 };
+    for (const s of submissions) {
+      if ((s.created_at || "").slice(0, 10) === today) c.today++;
+      if (c[s.status] !== undefined) c[s.status]++;
+    }
+    return c;
+  }, [submissions]);
+
+  const printerOk = health?.printer === "connected";
+  const total = counts.today || submissions.length || 1;
+
+  const reprint = useCallback(async () => {
+    if (!selected) return;
+    if (!confirm(`Reprint #${selected.id} (${selected.subject})?`)) return;
+    try {
+      setReprintMsg("submitting…");
+      const r = await fetch(`${API}/print`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          from: selected.sender,
+          subject: selected.subject,
+          body: selected.body,
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.detail || `HTTP ${r.status}`);
+      setReprintMsg(`reprinted as #${j.id}`);
+      load();
+      setTimeout(() => setReprintMsg(null), 4000);
+    } catch (e) {
+      setReprintMsg(`reprint failed: ${e.message || e}`);
+      setTimeout(() => setReprintMsg(null), 6000);
+    }
+  }, [selected, load]);
+
+  return (
+    <div className="min-h-screen flex flex-col">
+      <div className="max-w-[1280px] w-full mx-auto px-5 sm:px-8 lg:px-16 pt-8 sm:pt-10 lg:pt-12 pb-8 lg:pb-12 flex flex-col gap-0 flex-1">
+
+        {/* HEADER */}
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between sm:gap-8">
+          <div>
+            <div className="font-serif italic text-[44px] sm:text-[56px] lg:text-[64px] leading-none tracking-[-0.04em] text-ink">
+              Printy.
+            </div>
+            <div className="mt-2 font-mono text-[10px] sm:text-[11px] text-ink-mid tracker-tight break-all sm:break-normal">
+              operator's log · station 1 · font A · 32 col · /dev/usb-0483-5840
+            </div>
+          </div>
+          <div className="flex flex-col items-start sm:items-end gap-2">
+            <div
+              className={
+                "inline-flex items-center gap-2 border px-2.5 py-1 font-mono font-bold text-[11px] tracking-[0.2em] " +
+                (printerOk ? "border-ink text-ink" : "border-red text-red")
+              }
+              title={health ? JSON.stringify(health) : "checking…"}
+            >
+              <span
+                className={"w-2 h-2 rounded-full " + (printerOk ? "bg-green blink" : "bg-red blink")}
+              />
+              {printerOk ? "PRINTER ONLINE" : health ? "PRINTER MISSING" : "CHECKING…"}
+            </div>
+            <div className="font-mono text-[11px] text-ink-mid tracker-tight tabular-nums">
+              {fmtNowHeader(now)}
+            </div>
+            <button
+              onClick={() => setAutoRefresh((v) => !v)}
+              className="font-mono text-[11px] text-ink-lo hover:text-ink tracker-tight"
+            >
+              {autoRefresh ? `⟳  AUTO-REFRESH · ${REFRESH_MS / 1000}s` : "▶  PAUSED"}
+            </button>
+          </div>
+        </div>
+
+        {/* separator: solid + dashed */}
+        <div className="mt-7 rule-t" />
+        <div className="mt-[5px] perf-t" />
+
+        {/* TAPE SUMMARY */}
+        <div className="mt-9">
+          <RuleRow label="REGISTER · TODAY" />
+        </div>
+        <div className="mt-5 space-y-1.5">
+          <TapeBarRow label="PRINTED" count={counts.printed} total={total} color="text-ink" />
+          <TapeBarRow label="PENDING" count={counts.pending} total={total} color="text-amber" />
+          <TapeBarRow label="FAILED"  count={counts.failed}  total={total} color="text-red" />
+          <TapeBarRow label="LOST"    count={counts.lost}    total={total} color="text-gray" />
+        </div>
+        <div className="mt-5">
+          <RuleRow label={`Σ  ${counts.today} SUBMISSIONS · LOGGED FROM 00:00 UTC`} />
+        </div>
+
+        {/* perforation between tape and main */}
+        <div className="mt-9 perf-t" />
+
+        {error && (
+          <div className="mt-4 border border-red text-red font-mono text-sm px-3 py-2">
+            !!  {error}
+          </div>
+        )}
+
+        {reprintMsg && (
+          <div className="mt-4 border border-ink text-ink font-mono text-sm px-3 py-2 tracker-tight">
+            ⟳  {reprintMsg}
+          </div>
+        )}
+
+        {/* MAIN: log + ticket */}
+        <div className="mt-9 grid gap-8 lg:gap-8 flex-1 min-h-0 grid-cols-1 lg:[grid-template-columns:1fr_380px]">
+
+          {/* LOG */}
+          <div className="flex flex-col min-h-0 order-1">
+            <RuleRow label="LOG · LIVE" />
+            <div
+              className="mt-4 hidden lg:grid items-center gap-3 pl-5 pr-2 pb-2 font-mono font-bold tracking-[0.32em] text-[10px] text-ink-lo lg:[grid-template-columns:56px_80px_110px_96px_1fr]"
+            >
+              <div>ID</div>
+              <div>TIME</div>
+              <div>STATUS</div>
+              <div>FROM</div>
+              <div>SUBJECT</div>
+            </div>
+            <div className="perf-t mt-4 lg:mt-0" />
+            <div className="lg:overflow-auto lg:flex-1">
+              {submissions.length === 0 && !error && (
+                <div className="px-5 py-10 text-center text-ink-lo text-sm font-mono">
+                  ··· no submissions yet ···
+                </div>
+              )}
+              {submissions.map((row) => (
+                <LogRow
+                  key={row.id}
+                  row={row}
+                  selected={row.id === selectedId}
+                  onClick={() => setSelectedId(row.id === selectedId ? null : row.id)}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* TICKET */}
+          <div ref={ticketRef} className="min-h-0 order-2 lg:order-2">
+            <Ticket row={selected} onClose={() => setSelectedId(null)} onReprint={reprint} />
+          </div>
+        </div>
+
+        {/* FOOTER */}
+        <div className="mt-10 perf-t" />
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between font-mono text-[10px] text-ink-lo tracker-tight">
+          <div className="break-all sm:break-normal">printy v0.1.0 · is-pc.tail7418f.ts.net/printy</div>
+          <div className="font-bold tracking-[0.4em]">· · · END · OF · TAPE · · ·</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
