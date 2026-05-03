@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
@@ -17,6 +18,22 @@ from .printer import is_connected
 from .service import PrintError, submit_and_print
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+
+# Owner login comes from the env so the literal email never lands in source.
+# When unset, the gate is disabled and the endpoints below are open — useful
+# for local dev without tailscale serve in front. In production set
+# PRINTY_OWNER_LOGIN to the tailnet login that should see /ui and /submissions.
+OWNER_LOGIN = os.environ.get("PRINTY_OWNER_LOGIN", "").strip().lower()
+
+
+def require_owner(request: Request) -> None:
+    """Reject tailnet peers other than the configured owner with a 401."""
+    if not OWNER_LOGIN:
+        return
+    user = from_headers(request.headers)
+    if user is None or user.login.lower() != OWNER_LOGIN:
+        raise HTTPException(status_code=401, detail="unauthorized")
+
 
 log = logging.getLogger("printy")
 
@@ -81,12 +98,12 @@ def submit_print(req: PrintRequest, request: Request) -> PrintResponse:
     return PrintResponse(id=sub_id, status="printed")
 
 
-@printy_app.get("/submissions")
+@printy_app.get("/submissions", dependencies=[Depends(require_owner)])
 def list_recent(limit: int = 50) -> list[dict]:
     return db.list_submissions(limit=limit)
 
 
-@printy_app.get("/submissions/{submission_id}")
+@printy_app.get("/submissions/{submission_id}", dependencies=[Depends(require_owner)])
 def get_one(submission_id: int) -> dict:
     row = db.get_submission(submission_id)
     if row is None:
@@ -94,7 +111,7 @@ def get_one(submission_id: int) -> dict:
     return row
 
 
-@printy_app.get("/ui", include_in_schema=False)
-@printy_app.get("/ui/", include_in_schema=False)
+@printy_app.get("/ui", include_in_schema=False, dependencies=[Depends(require_owner)])
+@printy_app.get("/ui/", include_in_schema=False, dependencies=[Depends(require_owner)])
 def ui() -> FileResponse:
     return FileResponse(STATIC_DIR / "index.html")
