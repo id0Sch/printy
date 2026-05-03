@@ -29,8 +29,14 @@ curl -X POST http://127.0.0.1:7777/printy/print \
 Stop the foreground server (Ctrl-C). Now make it auto-start:
 
 ```bash
-# 4. Install launchd plist (replace placeholders, copy, load)
-sed "s|__HOME__|$HOME|g" backend/launchd/co.printy.backend.plist \
+# 4. Install launchd plist (replace placeholders, copy, load).
+#    Pick the tailnet login that should see /ui and /submissions (or leave
+#    empty to disable that gate and keep everything open).
+OWNER_LOGIN="you@example.com"   # or "" to disable the gate
+
+sed -e "s|__HOME__|$HOME|g" \
+    -e "s|__OWNER_LOGIN__|$OWNER_LOGIN|g" \
+    backend/launchd/co.printy.backend.plist \
     > ~/Library/LaunchAgents/co.printy.backend.plist
 launchctl bootstrap gui/$UID ~/Library/LaunchAgents/co.printy.backend.plist
 

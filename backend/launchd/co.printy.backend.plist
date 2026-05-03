@@ -4,16 +4,22 @@
   Auto-start the printy backend at login on the printer-laptop.
 
   Install:
-    1. Copy and substitute __HOME__ with your $HOME:
-         sed "s|__HOME__|$HOME|g" backend/launchd/co.printy.backend.plist \
+    1. Copy, substituting __HOME__ with $HOME and __OWNER_LOGIN__ with the
+       tailnet login (e.g. you@example.com) that should see /ui and
+       /submissions. Pass an empty string for __OWNER_LOGIN__ to disable
+       the gate (everything stays open — useful for shared printers):
+         sed -e "s|__HOME__|$HOME|g" \
+             -e "s|__OWNER_LOGIN__|you@example.com|g" \
+             backend/launchd/co.printy.backend.plist \
            > ~/Library/LaunchAgents/co.printy.backend.plist
     2. Load:
          launchctl bootstrap gui/$UID ~/Library/LaunchAgents/co.printy.backend.plist
     3. Status / logs:
          launchctl print gui/$UID/co.printy.backend
          tail -f __HOME__/dev/printy/printy.stdout.log
-    4. Unload:
+    4. Reload (e.g. after editing env vars):
          launchctl bootout gui/$UID/co.printy.backend
+         launchctl bootstrap gui/$UID ~/Library/LaunchAgents/co.printy.backend.plist
 -->
 <plist version="1.0">
 <dict>
@@ -36,6 +42,8 @@
     <dict>
         <key>PATH</key>
         <string>__HOME__/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <key>PRINTY_OWNER_LOGIN</key>
+        <string>__OWNER_LOGIN__</string>
     </dict>
 
     <key>RunAtLoad</key>
